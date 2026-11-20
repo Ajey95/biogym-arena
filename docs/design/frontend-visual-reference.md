@@ -2,6 +2,16 @@
 
 These boards show the intended **BioGym Arena experience**, not screenshots of a working application or measured evaluation results. Session names, episode statuses, trajectories, charts, and molecular imagery are illustrative design content. Product data must come from recorded episodes and scientific artifacts when the frontend is built.
 
+## Pixel-art direction (current)
+
+The revised direction uses crisp pixel-art rooms and a small robot agent. The robot travels along the lab floor, moves within the active scientific cell, and appears as the agent marker in replay and TransferArena. The [animated motion study](robot-motion-study.svg) demonstrates the visual rhythm. It is a looping design asset, not a frontend implementation or a recording of a real agent.
+
+![Pixel-art Lab Floor, Episode Replay, and TransferArena concept](frontend-visual-reference-v2-pixel.png)
+
+![Pixel-art Protein Structure Room and Evaluation Hall concept](room-and-evaluation-reference-v2-pixel.png)
+
+## Earlier visual direction
+
 ![Lab Floor, Episode Replay, and TransferArena concept](frontend-visual-reference-v1.png)
 
 ![Protein Structure Room and Evaluation Hall concept](room-and-evaluation-reference-v1.png)
@@ -12,7 +22,9 @@ These boards show the intended **BioGym Arena experience**, not screenshots of a
 Lab Floor → Scientific Room → Session → Episode Replay → TransferArena → Evaluation Hall → Run ZIP
 ```
 
-The **moving floor** is the navigation metaphor. It visually carries an agent capsule past scientific rooms and toward TransferArena. It should never be the only navigation method: room links, breadcrumbs, and keyboard-accessible controls remain available. Reduced-motion preferences should replace travel animations with immediate transitions.
+The **moving floor** is the navigation metaphor. It visually carries the robot agent past scientific rooms and toward TransferArena. It should never be the only navigation method: room links, breadcrumbs, and keyboard-accessible controls remain available. Reduced-motion preferences should replace travel animations with immediate transitions.
+
+In the pixel-art direction, the robot represents the agent's **recorded state**. Entering a room, walking to a tool station, pausing at a failed action, and moving to a recovery step should correspond to episode events. It must not imply that a scientific action succeeded merely because an animation completed. The moving floor connects rooms; a selected episode can zoom into its own cell for more detailed robot movement.
 
 ## Screen contract
 
@@ -57,4 +69,4 @@ The run ZIP should contain task and source snapshots, configuration, model and t
 
 ## Source prompts
 
-The two raster boards were generated with the built-in image generation tool. The final prompts are preserved in [image-prompts.md](image-prompts.md) for visual continuity. Their layout and mood are references; their depicted data is not authoritative.
+The raster boards were generated and edited with the built-in image generation tool. The final prompts are preserved in [image-prompts.md](image-prompts.md) for visual continuity. Their layout and mood are references; their depicted data is not authoritative. The animated robot motion study is a hand-authored SVG design reference.

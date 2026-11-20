@@ -74,7 +74,7 @@ The planned runtime follows [Hugging Face OpenEnv](https://huggingface.co/docs/o
 
 **TransferArena is part of the initial demonstration plan.** It evaluates an agent on an unseen task after controlled room episodes, with source status and evaluation conditions visible. The initial demo targets at least one live scientific service. Recorded, versioned inputs are also needed for repeatable comparisons when external records or availability change; replayed data must not be labelled live.
 
-The planned interface synchronizes:
+The planned interface uses a **pixel-art laboratory** with a small robot representing the agent as it moves through cells. Its position and reactions should follow recorded episode events. The interface synchronizes:
 
 - a 3D molecular view using coordinates relevant to the active episode;
 - a live tool and evidence graph;
