@@ -3,7 +3,7 @@ import hashlib
 
 import pytest
 
-from biogym.rl_demonstrations import build_demonstration
+from biogym.rl_demonstrations import build_demonstration, decision_examples
 from biogym.rl_suite import SUITE_HASH, TASKS, split_tasks
 from biogym.rl_train import validate_warm_adapter
 
@@ -35,6 +35,17 @@ def test_joint_demonstration_uses_three_tools_without_linking_records():
     result = json.loads([message["content"] for message in demo["messages"]
                          if message["role"] == "tool"][-1])
     assert result["verified_success"] is True
+
+
+def test_decision_examples_keep_tool_results_in_prompt_and_agent_call_in_completion():
+    demo = build_demonstration(TASKS["rl-seq-P69905-recovery"])
+    examples = decision_examples(demo)
+    assert len(examples) == 4
+    assert examples[0]["prompt"] == demo["messages"][:1]
+    assert examples[0]["completion"][0]["tool_calls"][0]["function"]["name"] == "lookup_uniprot"
+    assert json.loads(examples[1]["prompt"][-1]["content"])["error"] == "transient_upstream_timeout"
+    assert examples[-1]["completion"][0]["tool_calls"][0]["function"]["name"] == "submit_conclusion"
+    assert examples[-1]["prompt"][-1]["role"] == "tool"
 
 
 def test_demonstration_builder_rejects_heldout_cases():

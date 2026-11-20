@@ -53,8 +53,9 @@ this pilot's verified memory budget. The pilot uses `Qwen/Qwen3-0.6B` to
 validate the *LLM* training path. It is never labelled a Sarvam model.
 
 The version 2 recipe first generates **train-only, verifier-checked tool-call
-demonstrations** and uses TRL SFT to teach the small model to complete tool
-conversations. It then uses that adapter as the before-RL policy and applies
+demonstrations** and uses TRL SFT on each agent decision, with prior tool
+results in the prompt and loss on the next tool call. It then uses that adapter
+as the before-RL policy and applies
 TRL GRPO through `environment_factory`. This separates supervised tool-use
 warm start from reward-driven RL updates. The SFT manifest records the exact
 80 train case IDs, tool schema hash, demonstration hash, optimizer steps,

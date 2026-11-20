@@ -66,3 +66,13 @@ def build_demonstration(task: Task) -> dict:
     return {"suite_hash": SUITE_HASH, "case_id": task.id,
             "source_key": task.source_key, "messages": messages,
             "verified_success": True}
+
+
+def decision_examples(demonstration: dict) -> list[dict]:
+    """Supervise each agent decision with previous tool observations as context."""
+    messages = demonstration["messages"]
+    return [
+        {"prompt": messages[:index], "completion": [message]}
+        for index, message in enumerate(messages)
+        if message["role"] == "assistant" and message.get("tool_calls")
+    ]

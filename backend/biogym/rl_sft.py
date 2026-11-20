@@ -14,7 +14,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .rl_demonstrations import build_demonstration
+from .rl_demonstrations import build_demonstration, decision_examples
 from .rl_suite import BioGymRLToolEnv, SCHEMA_VERSION, SUITE_HASH, split_tasks
 from .rl_train import DEFAULT_MODEL, _file_hashes
 
@@ -54,17 +54,16 @@ def main() -> None:
         "".join(json.dumps(item, sort_keys=True) + "\n" for item in demonstrations),
         encoding="utf-8",
     )
-    dataset = Dataset.from_list(
-        [{"messages": item["messages"], "tools": schemas} for item in demonstrations],
-        on_mixed_types="use_json",
-    )
+    examples = [example | {"tools": schemas}
+                for item in demonstrations for example in decision_examples(item)]
+    dataset = Dataset.from_list(examples, on_mixed_types="use_json")
     config = SFTConfig(
         output_dir=str(output / "trainer"),
         model_init_kwargs={"dtype": "float16"},
         fp16=True, bf16=False,
         per_device_train_batch_size=1, gradient_accumulation_steps=4,
         num_train_epochs=args.epochs, learning_rate=5e-5,
-        max_length=4096, assistant_only_loss=True,
+        max_length=4096, completion_only_loss=True,
         gradient_checkpointing=True, packing=False,
         logging_steps=5, save_strategy="no", report_to="none",
         seed=args.seed, data_seed=args.seed,
@@ -76,9 +75,9 @@ def main() -> None:
                          peft_config=peft)
     tokenizer = trainer.processing_class
     lengths = [len(tokenizer.apply_chat_template(
-        item["messages"], tools=schemas, tokenize=True,
-        add_generation_prompt=False,
-    )) for item in demonstrations]
+        example["prompt"] + example["completion"], tools=schemas,
+        tokenize=True, add_generation_prompt=False,
+    )) for example in examples]
     if max(lengths) > config.max_length:
         raise RuntimeError(f"demonstration exceeds SFT context: max {max(lengths)} tokens")
     trainable = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
@@ -100,6 +99,7 @@ def main() -> None:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "model_id": args.model, "code_commit": commit, "seed": args.seed,
         "training_cases": len(demonstrations),
+        "training_decisions": len(examples),
         "case_ids": [item["case_id"] for item in demonstrations],
         "demonstration_sha256": hashlib.sha256(training_file.read_bytes()).hexdigest(),
         "tool_schema_sha256": hashlib.sha256(json.dumps(schemas, sort_keys=True).encode()).hexdigest(),
