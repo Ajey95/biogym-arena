@@ -2,6 +2,8 @@
 
 These boards show the intended **BioGym Arena experience**, not screenshots of a working application or measured evaluation results. Session names, episode statuses, trajectories, charts, and molecular imagery are illustrative design content. Product data must come from recorded episodes and scientific artifacts when the frontend is built.
 
+**Perspective exploration:** the [2D garage-world options](explorations/garage-view-options.md) explore a more game-like lab world with equipment stored in each bay. A side-view or top-down perspective has not yet been selected. The boards below remain references for information layout and inspection panels.
+
 ## Pixel-art direction (current)
 
 The revised direction uses crisp pixel-art rooms and a small robot agent. The robot travels along the lab floor, moves within the active scientific cell, and appears as the agent marker in replay and TransferArena. The [animated motion study](robot-motion-study.svg) demonstrates the visual rhythm. It is a looping design asset, not a frontend implementation or a recording of a real agent.
