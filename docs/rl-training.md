@@ -55,8 +55,8 @@ validate the *LLM* training path. It is never labelled a Sarvam model.
 The version 2 recipe first generates **train-only, verifier-checked tool-call
 demonstrations** and uses TRL SFT on each agent decision, with prior tool
 results in the prompt and loss on the next tool call. It then uses that adapter
-as the before-RL policy and applies
-TRL GRPO through `environment_factory`. This separates supervised tool-use
+as the before-RL policy and applies TRL GRPO through `environment_factory`.
+This separates supervised tool-use
 warm start from reward-driven RL updates. The SFT manifest records the exact
 80 train case IDs, tool schema hash, demonstration hash, optimizer steps,
 adapter hashes, and compute details. `rl_train` checks these before loading the
@@ -114,6 +114,12 @@ interval is descriptive for this small authored suite. The packager checks each
 reported attempt against its saved trace and verifies the event hash chain;
 missing or divergent traces prevent a comparison artifact.
 
+The 21 November 2026 v2 run completed this protocol. See the
+[measured test and TransferArena comparisons](../results/README.md), including
+the uncertainty intervals and downloadable full-run bundles. The result
+establishes a working update and evaluation path, not a reliable scientific
+agent.
+
 ## Current gates before a broad claim
 
 - Expand independently reviewed source entities, especially epitope evidence
@@ -122,7 +128,7 @@ missing or divergent traces prevent a comparison artifact.
   scientific-performance claims. Automated reachability tests are not expert review.
 - Add adversarial source content, method alternatives, cross-source identity
   checks, and expert-reviewed case cards.
-- Verify held-out checkpoint loading, qualitative traces, reward exploitation,
-  and policy behavior on fresh live ImmunoGraph tasks.
+- Review qualitative traces and reward exploitation, then test policy behavior
+  on fresh live ImmunoGraph tasks.
 - For Sarvam 30B, obtain suitable GPU memory and run a model compatibility
   pilot before enabling its training recipe.

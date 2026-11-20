@@ -1,8 +1,8 @@
 # BioGym Arena — Product Requirements Document
 
-**Version:** 1.1
+**Version:** 1.2
 
-**Date:** 20 November 2026
+**Date:** 21 November 2026
 
 **Status:** Active implementation; completion gates remain open
 
@@ -423,3 +423,17 @@ SCI-02, GRD-01, RL-01, EVAL-01, XFER-01 and PROV-01. The version 1 pilot result
 remains historical; it cannot be presented as a version 2 result. No expert
 review, version 2 model training, or transfer measurement is implied by this
 revision.
+
+### Revision 1.2 — 21 November 2026
+
+The v2 training recipe now builds verifier-checked demonstrations from the
+train split, supervises each next tool decision with prior tool observations
+as context, checks the warm-start adapter's lineage, and then performs GRPO
+updates. A Qwen3-0.6B Colab T4 run completed 62 supervised and 32 GRPO
+optimizer steps. Fresh-process evaluations measured 5/40 to 9/40 verified
+successes on held-out test cases and 3/40 to 6/40 in TransferArena. Both
+paired bootstrap intervals include zero. Complete run bundles and comparison
+manifests are recorded in [results](../results/README.md). This establishes a
+working LLM adapter training and evaluation path for RL-01, EVAL-01, XFER-01,
+and PROV-01. It does not satisfy independent scientific review, broad
+reliability, Sarvam model adaptation, or app serving integration.
