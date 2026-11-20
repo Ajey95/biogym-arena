@@ -77,7 +77,7 @@ def main() -> None:
     lengths = [len(tokenizer.apply_chat_template(
         example["prompt"] + example["completion"], tools=schemas,
         tokenize=True, add_generation_prompt=False,
-    )) for example in examples]
+    )["input_ids"]) for example in examples]
     if max(lengths) > config.max_length:
         raise RuntimeError(f"demonstration exceeds SFT context: max {max(lengths)} tokens")
     trainable = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
