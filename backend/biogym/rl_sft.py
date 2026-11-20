@@ -65,7 +65,6 @@ def main() -> None:
         per_device_train_batch_size=1, gradient_accumulation_steps=4,
         num_train_epochs=args.epochs, learning_rate=5e-5,
         max_length=4096, assistant_only_loss=True,
-        chat_template_kwargs={"enable_thinking": False},
         gradient_checkpointing=True, packing=False,
         logging_steps=5, save_strategy="no", report_to="none",
         seed=args.seed, data_seed=args.seed,
@@ -78,7 +77,7 @@ def main() -> None:
     tokenizer = trainer.processing_class
     lengths = [len(tokenizer.apply_chat_template(
         item["messages"], tools=schemas, tokenize=True,
-        add_generation_prompt=False, enable_thinking=False,
+        add_generation_prompt=False,
     )) for item in demonstrations]
     if max(lengths) > config.max_length:
         raise RuntimeError(f"demonstration exceeds SFT context: max {max(lengths)} tokens")
