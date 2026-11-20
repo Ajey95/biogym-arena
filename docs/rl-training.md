@@ -48,26 +48,37 @@ do not validate biological efficacy.
 
 ## Colab pilot
 
-The currently accessible Colab account offers a T4 GPU. It does not offer an
-enabled A100, H100, or L4. Sarvam 30B is therefore outside this pilot's
-verified memory budget. The pilot uses `Qwen/Qwen3-0.6B` to validate the *LLM*
-RL path, with a LoRA adapter and TRL GRPO `environment_factory`. It is never
-labelled a Sarvam model. Sarvam-1 is a distinct, older base completion model
-with a non-commercial license and requires a separate instruction warm-start;
-it is not a drop-in substitute for Sarvam 30B.
+The currently accessible Colab account offers a T4 GPU. Sarvam 30B is outside
+this pilot's verified memory budget. The pilot uses `Qwen/Qwen3-0.6B` to
+validate the *LLM* training path. It is never labelled a Sarvam model.
+
+The version 2 recipe first generates **train-only, verifier-checked tool-call
+demonstrations** and uses TRL SFT to teach the small model to complete tool
+conversations. It then uses that adapter as the before-RL policy and applies
+TRL GRPO through `environment_factory`. This separates supervised tool-use
+warm start from reward-driven RL updates. The SFT manifest records the exact
+80 train case IDs, tool schema hash, demonstration hash, optimizer steps,
+adapter hashes, and compute details. `rl_train` checks these before loading the
+warm adapter and copies the SFT manifest and demonstrations into the run ZIP.
+The demonstrations are generated from the current verifier and are **not**
+expert-reviewed biological truth. They must not include held-out or transfer
+answers.
 
 From a GPU Linux runtime after cloning the repository:
 
 ```bash
 pip install -e 'backend[train]'
-python -m biogym.rl_train --output /content/biogym-run --max-steps 16
+python -m biogym.rl_sft --output /content/biogym-v2-sft --epochs 1
+python -m biogym.rl_train --output /content/biogym-v2-run \
+  --warm-adapter /content/biogym-v2-sft/adapter --max-steps 32
 ```
 
-The runner saves initial and final adapters, their file digests, trainable
+The GRPO runner saves initial and final adapters, their file digests, trainable
 parameter count, optimizer-step count, GPU/library metadata, and training
 traces. It does **not** evaluate held-out cases inside the training process.
-The test and transfer splits are never used for gradient updates. The version 2
-notebook uses two generations per prompt and 32 steps as a compute pilot;
+The test and transfer splits are never used for SFT or GRPO gradient updates.
+The version 2 notebook uses two generations per prompt and 32 GRPO steps as a
+compute pilot;
 further scale requires measured reward variance and compute cost. A run report
 may say "after RL training" only when the adapter tensor hash changed,
 optimizer steps are positive, the checkpoint reloads, and separate held-out

@@ -172,6 +172,7 @@ def main() -> None:
     source_files = [
         "backend/pyproject.toml", "backend/biogym/data/rl_snapshots_v1.json",
         "backend/biogym/rl_suite.py", "backend/biogym/rl_train.py",
+        "backend/biogym/rl_demonstrations.py", "backend/biogym/rl_sft.py",
         "backend/biogym/rl_eval.py", "backend/biogym/rl_compare.py",
         "notebooks/biogym_rl_colab.ipynb", "docs/rl-training.md",
     ]

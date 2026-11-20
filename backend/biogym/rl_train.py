@@ -41,10 +41,34 @@ def _summarize_traces(directory: Path) -> dict:
             "rows": rows}
 
 
+def validate_warm_adapter(adapter_dir: Path, model_id: str) -> dict:
+    """Reject stale, tampered or held-out-contaminated supervised adapters."""
+    manifest_path = adapter_dir.parent / "warmstart_manifest.json"
+    report = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if report["model_id"] != model_id:
+        raise ValueError("warm adapter model differs from requested base model")
+    if report["suite_hash"] != SUITE_HASH:
+        raise ValueError("warm adapter suite differs from current tasks")
+    if report["optimizer_steps"] < 1:
+        raise ValueError("warm adapter has no optimizer updates")
+    train_ids = {task.id for task in split_tasks("train")}
+    if not report["case_ids"] or set(report["case_ids"]) - train_ids:
+        raise ValueError("warm adapter inventory includes a non-train case")
+    weights = adapter_dir / "adapter_model.safetensors"
+    digest = hashlib.sha256(weights.read_bytes()).hexdigest()
+    if digest != report["adapter_hashes"][weights.name]:
+        raise ValueError("warm adapter tensor hash mismatch")
+    demonstrations = adapter_dir.parent / "train_demonstrations.jsonl"
+    if hashlib.sha256(demonstrations.read_bytes()).hexdigest() != report["demonstration_sha256"]:
+        raise ValueError("warm adapter demonstration hash mismatch")
+    return report
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--warm-adapter", type=Path)
     parser.add_argument("--max-steps", type=int, default=16)
     parser.add_argument("--seed", type=int, default=3407)
     args = parser.parse_args()
@@ -83,9 +107,22 @@ def main() -> None:
     gpu = torch.cuda.get_device_properties(0)
     if gpu.total_memory < 14_000_000_000:
         raise RuntimeError("This recipe requires at least 14 GB GPU memory")
+    warm_report = None
+    model_for_training = args.model
+    if args.warm_adapter:
+        adapter_dir = args.warm_adapter.resolve()
+        warm_report = validate_warm_adapter(adapter_dir, args.model)
+        warm_archive = output / "warmstart"
+        warm_archive.mkdir()
+        shutil.copy2(adapter_dir.parent / "warmstart_manifest.json", warm_archive)
+        shutil.copy2(adapter_dir.parent / "train_demonstrations.jsonl", warm_archive)
+        from peft import PeftModel
+        from transformers import AutoModelForCausalLM
+        base = AutoModelForCausalLM.from_pretrained(args.model, dtype=torch.float16)
+        model_for_training = PeftModel.from_pretrained(base, adapter_dir, is_trainable=True)
     config = GRPOConfig(
         output_dir=str(output / "trainer"),
-        model_init_kwargs={"dtype": "float16"},
+        model_init_kwargs=None if args.warm_adapter else {"dtype": "float16"},
         fp16=True, bf16=False, use_vllm=False,
         per_device_train_batch_size=1, gradient_accumulation_steps=2,
         per_device_eval_batch_size=2,
@@ -106,9 +143,10 @@ def main() -> None:
                       bias="none", task_type="CAUSAL_LM",
                       target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])
     trainer = GRPOTrainer(
-        model=args.model, args=config, train_dataset=train_dataset,
+        model=model_for_training, args=config, train_dataset=train_dataset,
         eval_dataset=test_dataset, reward_funcs=[reward_outcome, reward_process],
-        peft_config=peft, environment_factory=BioGymRLToolEnv,
+        peft_config=None if args.warm_adapter else peft,
+        environment_factory=BioGymRLToolEnv,
     )
     trainable = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
     if trainable < 1:
@@ -161,6 +199,10 @@ def main() -> None:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "suite_hash": SUITE_HASH, "model_id": args.model,
         "code_commit": git_commit, "seed": args.seed,
+        "warmstart_manifest": "warmstart/warmstart_manifest.json" if warm_report else None,
+        "warmstart_demonstration_sha256": (warm_report["demonstration_sha256"]
+                                            if warm_report else None),
+        "warmstart_optimizer_steps": warm_report["optimizer_steps"] if warm_report else None,
         "model_revision": getattr(trainer.model.config, "_commit_hash", None),
         "train_entities": len({task.source_key for task in train_tasks}),
         "test_entities": len({task.source_key for task in test_tasks}),
