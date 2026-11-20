@@ -59,9 +59,9 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU is required for this LLM training command")
     output = args.output.resolve()
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError("output directory is not empty; choose a fresh directory for each run")
     output.mkdir(parents=True, exist_ok=True)
-    if (output / "run_manifest.json").exists():
-        raise FileExistsError("output already contains a completed run; choose a new directory")
 
     train_tasks = split_tasks("train")
     test_tasks = split_tasks("test")
