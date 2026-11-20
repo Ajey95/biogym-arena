@@ -98,7 +98,9 @@ adapter lineage, matched case groups, the declared attempt budget, and clean
 evaluation logs. Run it separately for test and transfer. It writes a comparison
 JSON and bundles the checkpoints, training/evaluation traces, logs, source
 snapshot, training code and notebook into one ZIP. The case-clustered bootstrap
-interval is descriptive for this small authored suite.
+interval is descriptive for this small authored suite. The packager checks each
+reported attempt against its saved trace and verifies the event hash chain;
+missing or divergent traces prevent a comparison artifact.
 
 ## Current gates before a broad claim
 

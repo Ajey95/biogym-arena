@@ -5,12 +5,13 @@ import argparse
 import hashlib
 import json
 import random
+import re
 import zipfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .rl_suite import SUITE_HASH, split_tasks
+from .rl_suite import SUITE_HASH, TASKS, _digest, split_tasks
 
 
 def _read(path: Path) -> dict:
@@ -32,6 +33,43 @@ def _zip_tree(bundle: zipfile.ZipFile, source: Path, prefix: str) -> None:
     for path in sorted(source.rglob("*")):
         if path.is_file():
             bundle.write(path, f"{prefix}/{path.relative_to(source).as_posix()}")
+
+
+def _validate_traces(directory: Path, report: dict, expected_case_ids: set[str]) -> None:
+    rows = report["heldout"]["rows"]
+    attempts = {row["attempt_id"] for row in rows}
+    if any(not re.fullmatch(r"[0-9a-f]{32}", attempt_id) for attempt_id in attempts):
+        raise ValueError("evaluation trace attempt ID is invalid")
+    if len(attempts) != len(rows) or len(rows) != report["heldout"]["attempts"]:
+        raise ValueError("evaluation trace attempt IDs or count differ from report")
+    if sum(bool(row["success"]) for row in rows) != report["heldout"]["successes"]:
+        raise ValueError("evaluation trace success count differs from report")
+    trace_dir = directory / "traces"
+    files = {path.stem for path in trace_dir.glob("*.json")}
+    if files != attempts:
+        raise ValueError("evaluation trace files differ from report attempts")
+    for row in rows:
+        trace = _read(trace_dir / f"{row['attempt_id']}.json")
+        if (trace.get("attempt_id") != row["attempt_id"] or
+                trace.get("case_id") != row["case_id"] or
+                row["case_id"] not in expected_case_ids or
+                trace.get("source_key") != TASKS[row["case_id"]].source_key or
+                trace.get("split") != report.get("split", "test") or
+                trace.get("suite_hash") != SUITE_HASH):
+            raise ValueError("evaluation trace identity or lineage mismatch")
+        if any(trace.get(key) != row[key] for key in
+               ("success", "done", "reward", "labops", "researchsense")):
+            raise ValueError("evaluation trace outcome differs from report")
+        previous = "GENESIS"
+        for index, event in enumerate(trace.get("events", []), start=1):
+            content = {key: value for key, value in event.items()
+                       if key not in {"hash", "evidence_id"}}
+            event_hash = _digest(content)
+            if (event.get("sequence") != index or event.get("previous_hash") != previous or
+                    event.get("hash") != event_hash or
+                    event.get("evidence_id") != f"e{index}-{event_hash[:12]}"):
+                raise ValueError("evaluation trace event hash chain is invalid")
+            previous = event_hash
 
 
 def main() -> None:
@@ -69,8 +107,12 @@ def main() -> None:
             raise ValueError(f"{label} evaluation has wrong model or seed")
         if item["adapter_sha256"] != run[f"{label}_adapter_hashes"]["adapter_model.safetensors"]:
             raise ValueError(f"{label} adapter hash mismatch")
+        if item.get("scorer_version", run["scorer_version"]) != run["scorer_version"]:
+            raise ValueError(f"{label} scorer version mismatch")
         if item["heldout"]["attempts"] != expected_attempts:
             raise ValueError(f"{label} evaluation lacks {expected_attempts} attempts")
+        _validate_traces(args.pre_eval if label == "pre" else args.post_eval,
+                         item, expected_case_ids)
     if run["optimizer_steps"] < 1 or run["pre_adapter_hashes"]["adapter_model.safetensors"] == run["post_adapter_hashes"]["adapter_model.safetensors"]:
         raise ValueError("no verified LLM adapter update")
 
