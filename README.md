@@ -24,6 +24,8 @@
 
 BioGym Arena is a **documentation-first project proposal**. This repository does not yet contain a running OpenEnv environment, trained agent, TransferArena evaluation, frontend, or measured results. The sections below describe the intended product and evaluation protocol, not implemented capabilities.
 
+The [Product Requirements Document](docs/PRD.md) is the technical build reference. The [selected top-down frontend design](docs/design/top-down-flow/README.md) defines the visual journey. Implementation will begin only when the project owner explicitly asks for it.
+
 ## The problem
 
 An MCP server can give an AI agent scientific tools. Tool access alone does not tell us whether the agent chooses appropriate tools, recovers from failures, preserves provenance, or draws conclusions supported by the returned evidence. An agent may complete a workflow yet still mishandle a corrupted input or misleading result.
