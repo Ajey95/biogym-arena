@@ -14,8 +14,8 @@ from importlib.resources import files
 from pathlib import Path
 
 
-SCHEMA_VERSION = "biogym-rl-v1"
-SCORER_VERSION = "source-evidence-rubric-v1"
+SCHEMA_VERSION = "biogym-rl-v2"
+SCORER_VERSION = "source-evidence-rubric-v2"
 AMINO_ACIDS = frozenset("ACDEFGHIKLMNPQRSTVWY")
 
 
@@ -47,6 +47,8 @@ class Task:
     expected_claim: str
     required_tools: tuple[str, ...]
     limitation: str
+    prompt: str = ""
+    secondary_source_key: str | None = None
     fault_once: bool = False
     max_actions: int = 6
 
@@ -54,14 +56,10 @@ class Task:
         return {
             "schema_version": SCHEMA_VERSION, "room": self.room, "mode": self.mode,
             "input": self.input_data, "allowed_tools": list(self.required_tools),
-            "claim_options": {
-                "sequence": ["sequence_match", "sequence_mismatch", "invalid_fasta"],
-                "peptide": ["computational_candidate", "unsupported_candidate"],
-                "structure": ["xray", "nmr", "electron_microscopy"],
-            }[self.kind],
-            "required_limitation": self.limitation,
-            "instruction": "Call the appropriate tools, cite their evidence IDs, and report CACHED source status. "
-                           "Retry a transient database error within budget. Do not claim biological validation.",
+            "task": self.prompt,
+            "instruction": "Use tool evidence for the decision. Cite successful evidence IDs, "
+                           "report the source status returned by tools, and give a scientific scope limitation. "
+                           "Retry a transient database error within budget.",
             "remaining_actions": self.max_actions,
         }
 
@@ -91,20 +89,35 @@ def make_tasks(sources: dict[str, dict] | None = None) -> dict[str, Task]:
                     "sequence", source_key,
                     {"accession": accession, "fasta": f">{accession}\n{sequence}"},
                     claim, ("lookup_uniprot", "check_fasta"), "database_metadata_only",
+                    prompt="Validate the supplied FASTA, then compare its sequence with the "
+                           "cached UniProt sequence window. Report match, mismatch, or invalid FASTA.",
                     fault_once=fault,
                 )
             for variant, peptide, claim in (
-                ("present", segment[3:12], "computational_candidate"),
-                ("absent", _mutate(segment)[3:12], "unsupported_candidate"),
+                ("present", segment[3:12], "sequence_window_contains_peptide"),
+                ("absent", _mutate(segment)[3:12], "sequence_window_lacks_peptide"),
             ):
+                if (peptide in segment) != (variant == "present"):
+                    raise ValueError(f"peptide case cannot be verified from cached window: {accession}")
                 case_id = f"rl-epi-{accession}-{variant}"
                 tasks[case_id] = Task(
                     case_id, split, "epitope", "EvidenceGym", "peptide", source_key,
-                    {"accession": accession, "peptide": peptide,
-                     "predictor_score": 0.72 if variant == "present" else 0.63},
+                    {"accession": accession, "peptide": peptide},
                     claim, ("lookup_uniprot", "analyze_peptide"),
-                    "prediction_not_validation",
+                    "sequence_occurrence_not_validation",
+                    prompt="Check whether the peptide occurs in the cached UniProt sequence window. "
+                           "Sequence occurrence is not binding, immunogenicity, or experimental validation.",
                 )
+            case_id = f"rl-epi-{accession}-binding_claim"
+            tasks[case_id] = Task(
+                case_id, split, "epitope", "EvidenceGym", "peptide", source_key,
+                {"accession": accession, "peptide": segment[3:12],
+                 "proposed_claim": "This peptide is experimentally validated to bind."},
+                "insufficient_experimental_evidence", ("lookup_uniprot", "analyze_peptide"),
+                "sequence_occurrence_not_validation",
+                prompt="Audit the proposed binding claim using the available evidence. "
+                       "Abstain if sequence metadata cannot establish experimental binding.",
+            )
         else:
             method = source["method"].upper()
             claim = ("xray" if "X-RAY" in method else
@@ -118,8 +131,38 @@ def make_tasks(sources: dict[str, dict] | None = None) -> dict[str, Task]:
                     case_id, split, "structure", "ChaosGym" if fault else "ToolGym",
                     "structure", source_key, {"pdb_id": accession}, claim,
                     ("lookup_rcsb",), "database_metadata_only", fault_once=fault,
+                    prompt="Identify the experimental method recorded for this RCSB entry. "
+                           "Do not infer an unrelated biological result from its method metadata.",
                     max_actions=5,
                 )
+    for split in ("train", "test", "transfer"):
+        proteins = [key for key, source in sources.items()
+                    if source["split"] == split and source["kind"] == "uniprot"]
+        structures = [key for key, source in sources.items()
+                      if source["split"] == split and source["kind"] == "rcsb"]
+        for protein_key, structure_key in zip(proteins, structures):
+            protein = sources[protein_key]
+            structure = sources[structure_key]
+            method = structure["method"].upper()
+            method_claim = ("xray" if "X-RAY" in method else "nmr" if "NMR" in method
+                            else "electron_microscopy" if "ELECTRON MICROSCOPY" in method else None)
+            if method_claim is None:
+                raise ValueError(f"unsupported method for {structure['id']}: {method}")
+            case_id = f"rl-joint-{protein['id']}-{structure['id']}"
+            tasks[case_id] = Task(
+                case_id, split, "transfer" if split == "transfer" else "cross_room",
+                "ResearchGym", "joint", protein_key,
+                {"accession": protein["id"], "pdb_id": structure["id"],
+                 "fasta": f">{protein['id']}\n{protein['segment']}"},
+                f"sequence_match|{method_claim}",
+                ("lookup_uniprot", "check_fasta", "lookup_rcsb"),
+                "independent_metadata_only",
+                prompt="Audit two independent records. Compare the FASTA to its UniProt window "
+                       "and identify the RCSB experimental method. Join the sequence and method "
+                       "labels with '|'. Do not infer that the two records are biologically linked.",
+                secondary_source_key=structure_key,
+                max_actions=6,
+            )
     if len(tasks) != len(set(tasks)):
         raise ValueError("duplicate task IDs")
     return tasks
@@ -184,6 +227,8 @@ class BioGymRLToolEnv:
         return self._task
 
     def _record(self, name: str, arguments: dict, result: dict) -> str:
+        previous_success = any(event["tool"] == name and event["result"].get("ok")
+                               for event in self._events)
         previous = self._events[-1]["hash"] if self._events else "GENESIS"
         event = {"sequence": len(self._events) + 1, "tool": name, "arguments": arguments,
                  "result": result, "previous_hash": previous}
@@ -192,7 +237,7 @@ class BioGymRLToolEnv:
         self._events.append(event)
         if result.get("ok"):
             self._evidence[event["evidence_id"]] = event
-            self.reward += 0.04
+            self.reward += -0.04 if previous_success else 0.04
         self._save_trace()
         return event["evidence_id"]
 
@@ -248,7 +293,7 @@ class BioGymRLToolEnv:
         if self._task is None:
             raise RuntimeError("reset first")
         task = self._require("lookup_rcsb", pdb_id, self._task.input_data["pdb_id"])
-        record = SOURCES[task.source_key]
+        record = SOURCES[task.secondary_source_key or task.source_key]
         if task.fault_once and not self._fault_fired:
             self._fault_fired = True
             eid = self._record("lookup_rcsb", {"pdb_id": pdb_id},
@@ -268,9 +313,11 @@ class BioGymRLToolEnv:
         if self._task is None:
             raise RuntimeError("reset first")
         task = self._require("analyze_peptide", peptide, self._task.input_data["peptide"])
+        record = SOURCES[task.source_key]
         result = {"ok": True, "peptide": peptide, "standard_residues": set(peptide) <= AMINO_ACIDS,
-                  "score": task.input_data["predictor_score"], "experimental_validation": False,
-                  "source_status": "FIXTURE", "method": "authored-score-v1"}
+                  "in_sequence_window": peptide in record["segment"],
+                  "experimental_validation": False,
+                  "method": "exact_substring_in_cached_window_v1", **self._source_result(record)}
         eid = self._record("analyze_peptide", {"peptide": peptide}, result)
         return json.dumps({**result, "evidence_id": eid})
 
@@ -278,10 +325,16 @@ class BioGymRLToolEnv:
         """Submit a bounded scientific decision with tool evidence and provenance.
 
         Args:
-            claim: One claim option from the task observation.
+            claim: Scientific finding label. Sequence labels: sequence_match,
+                sequence_mismatch, invalid_fasta. Peptide labels:
+                sequence_window_contains_peptide, sequence_window_lacks_peptide,
+                insufficient_experimental_evidence. Structure labels: xray,
+                nmr, electron_microscopy. Joint audits use sequence|method.
             evidence_ids: Comma-separated IDs returned by all required successful tools.
             source_status: Provenance of the external database record, usually CACHED.
-            limitation: Exact scope limitation specified by the task observation.
+            limitation: Scope label inferred from evidence: database_metadata_only for
+                sequence/structure metadata, sequence_occurrence_not_validation for peptide
+                evidence, or independent_metadata_only for a two-record audit.
         """
         if self._task is None or self.done:
             raise ValueError("no active episode")
@@ -295,13 +348,22 @@ class BioGymRLToolEnv:
         all_evidence = cited <= self._evidence.keys() and set(task.required_tools) <= successful_tools
         provenance_ok = source_status == "CACHED" and limitation == task.limitation
         claim_ok = claim == task.expected_claim
-        self.labops = float(set(task.required_tools) <= successful_tools)
-        self.researchsense = float(all_evidence and provenance_ok)
-        self.success = bool(claim_ok and self.researchsense)
+        used_required_tools = set(task.required_tools) <= successful_tools
+        redundant_or_invalid = any(event["result"].get("error") == "wrong_tool_or_identifier"
+                                   for event in self._events)
+        successful_names = [event["tool"] for event in self._events if event["result"].get("ok")]
+        redundant_or_invalid |= len(successful_names) != len(set(successful_names))
+        self.labops = (1.0 if used_required_tools and not redundant_or_invalid else
+                       0.5 if used_required_tools else 0.0)
+        self.researchsense = (1.0 if all_evidence and provenance_ok and claim_ok else
+                              0.5 if all_evidence and provenance_ok else 0.0)
+        self.success = bool(claim_ok and self.researchsense == 1.0)
         self.done = True
         self.reward += (1.0 if self.success else 0.0) + 0.1 * self.labops + 0.2 * self.researchsense
-        if claim not in {"sequence_match", "sequence_mismatch", "invalid_fasta", "computational_candidate",
-                         "unsupported_candidate", "xray", "nmr", "electron_microscopy"}:
+        if claim not in {"sequence_match", "sequence_mismatch", "invalid_fasta",
+                         "sequence_window_contains_peptide", "sequence_window_lacks_peptide",
+                         "insufficient_experimental_evidence", "xray", "nmr",
+                         "electron_microscopy"} and "|" not in claim:
             self.reward -= 0.2
         finding = {"verified_success": self.success, "claim_correct": claim_ok,
                    "evidence_complete": all_evidence, "provenance_correct": provenance_ok,

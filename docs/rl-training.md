@@ -1,5 +1,9 @@
 # BioGym RL training protocol
 
+**Current suite:** `biogym-rl-v2`. The [November 20 pilot](../results/README.md)
+used `biogym-rl-v1`; its 1/32 to 4/32 comparison is historical and cannot be
+carried forward as a version 2 result.
+
 This protocol is the first LLM post-training lane. It is separate from the
 small neural action-selector smoke test. A valid result needs a changed LLM
 adapter, optimizer steps, and a separate matched held-out comparison.
@@ -14,26 +18,33 @@ snapshots as newly collected experimental evidence. Rebuilding the snapshot
 requires a new suite hash and fresh baseline/evaluation runs.
 
 The current suite has 24 source records, assigned by biological entity or PDB
-record to 16 train, 4 test, and 4 transfer sources. Each source yields multiple
-task variants: sequence validation and identity, computational peptide scope,
-structure-method provenance, and transient failure recovery. This produces 64
-train, 16 test, and 16 transfer episodes. The training model sees the public
-observation and tool results; expected claims stay in the verifier. All
-attempts, including no-action and failed attempts, belong in the evaluation
-denominator. The case count is still small and authored; record-level splits
-do not prove broad biological generalization.
+record to 16 train, 4 test, and 4 transfer sources. Each source yields sequence
+identity/validity, peptide window occurrence, unsupported binding-claim audit,
+or structure-method cases. Paired UniProt/RCSB records add independent
+two-record audits that require both sequence and structure tools. This produces
+**80 train, 20 test, and 20 transfer episodes**. Transfer has two joint cases.
+The model sees the public task and tool results; expected claims, exact scope
+labels and per-task answer options stay out of the observation. All attempts,
+including no-action and failed attempts, belong in the evaluation denominator.
+The source set is still small and authored; record-level splits do not prove
+biological-family generalization or expert-reviewed case validity.
 
 ## Verifier and reward
 
-The policy must call task tools, cite successful evidence IDs, state `CACHED`
-for the external record, and use the required scope limitation. Sequence
-outcomes are checked against the captured sequence window and FASTA validity;
-peptide outcomes are bounded computational interpretations; structure outcomes
-are checked against the RCSB experimental-method field. A transient failure
-requires a retry. Wrong identifiers, missing evidence, wrong source status,
-and unsupported claims fail verification. Step events form a hash chain and
-record provenance. The scalar reward gives verified outcome most weight, then
-process and evidence quality. Scores do not validate biological efficacy.
+The policy must call task tools, cite successful evidence IDs, report the
+`CACHED` status returned by the external-record tool, and infer a scope label.
+Sequence outcomes use the captured sequence window and FASTA validity. Peptide
+outcomes use exact occurrence in that **32-residue window**; there is no authored
+predictor score or claim that absence from the window proves absence from the
+full protein. A separate claim audit requires abstention from an unsupported
+experimental-binding assertion. Structure outcomes use the RCSB experimental
+method. Joint audits require independent UniProt, FASTA and RCSB evidence;
+they do not assert that the two records are biologically linked. A transient
+failure requires a retry. Wrong identifiers, missing evidence, wrong source
+status and unsupported claims fail verification. Repeated successful tool calls
+do not earn more process reward. Step events form a hash chain and record
+provenance. LabOps, ResearchSense and verified outcome remain separate. Scores
+do not validate biological efficacy.
 
 ## Colab pilot
 
@@ -53,24 +64,29 @@ python -m biogym.rl_train --output /content/biogym-run --max-steps 16
 ```
 
 The runner saves initial and final adapters, their file digests, trainable
-parameter count, optimizer-step count, GPU/library metadata, training traces,
-and before/after held-out evaluation. Its test split is never used for gradient
-updates. The pilot recipe uses two generations per prompt, short budgets, and
-16 steps to establish the training path; further scale requires measured
-reward variance and compute cost. A run report may say "after RL training"
-only when the adapter tensor hash changed, optimizer steps are positive, the
-checkpoint reloads, and held-out results are present. Repeated evaluations
-over the same case do not increase the count of independent cases.
+parameter count, optimizer-step count, GPU/library metadata, and training
+traces. It does **not** evaluate held-out cases inside the training process.
+The test and transfer splits are never used for gradient updates. The version 2
+notebook uses two generations per prompt and 32 steps as a compute pilot;
+further scale requires measured reward variance and compute cost. A run report
+may say "after RL training" only when the adapter tensor hash changed,
+optimizer steps are positive, the checkpoint reloads, and separate held-out
+results are present. Repeated evaluations over one case do not increase the
+count of independent cases.
 
 For the final comparison, evaluate both frozen adapters in separate fresh GPU
 processes. This removes optimizer state from the post-training memory budget
-and checks the exact same 16 cases and 32 attempts per adapter:
+and checks the same 20 test cases with 40 attempts per adapter:
 
 ```bash
-python -m biogym.rl_eval --run-dir /content/biogym-run --adapter pre \
-  --output /content/biogym-pre-eval
-python -m biogym.rl_eval --run-dir /content/biogym-run --adapter post \
-  --output /content/biogym-post-eval
+python -m biogym.rl_eval --run-dir /content/biogym-v2-run --adapter pre \
+  --split test --output /content/biogym-v2-test-pre
+python -m biogym.rl_eval --run-dir /content/biogym-v2-run --adapter post \
+  --split test --output /content/biogym-v2-test-post
+python -m biogym.rl_eval --run-dir /content/biogym-v2-run --adapter pre \
+  --split transfer --output /content/biogym-v2-transfer-pre
+python -m biogym.rl_eval --run-dir /content/biogym-v2-run --adapter post \
+  --split transfer --output /content/biogym-v2-transfer-post
 ```
 
 Do not reuse a run or evaluation output directory after a failed attempt;
@@ -78,16 +94,18 @@ partial traces would corrupt the denominator. Review GPU allocation warnings
 and generation errors before using an evaluation as evidence.
 
 After both evaluations finish, `python -m biogym.rl_compare` validates the
-adapter lineage, the 16 matched case groups, 32 attempts per policy, and clean
-evaluation logs. It writes a comparison JSON and bundles the checkpoints,
-training/evaluation traces, logs, source snapshot, training code and notebook
-into one ZIP. The case-clustered bootstrap interval is descriptive for this
-small authored suite.
+adapter lineage, matched case groups, the declared attempt budget, and clean
+evaluation logs. Run it separately for test and transfer. It writes a comparison
+JSON and bundles the checkpoints, training/evaluation traces, logs, source
+snapshot, training code and notebook into one ZIP. The case-clustered bootstrap
+interval is descriptive for this small authored suite.
 
 ## Current gates before a broad claim
 
 - Expand independently reviewed source entities, especially epitope evidence
   and biologically meaningful transfer cases.
+- Get domain review of the version 2 case cards and scope labels before making
+  scientific-performance claims. Automated reachability tests are not expert review.
 - Add adversarial source content, method alternatives, cross-source identity
   checks, and expert-reviewed case cards.
 - Verify held-out checkpoint loading, qualitative traces, reward exploitation,

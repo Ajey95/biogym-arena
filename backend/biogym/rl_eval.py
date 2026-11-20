@@ -21,6 +21,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--adapter", choices=("pre", "post"), required=True)
+    parser.add_argument("--split", choices=("test", "transfer"), default="test")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -46,8 +47,10 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA GPU is required")
     output.mkdir(parents=True, exist_ok=True)
-    test_tasks = split_tasks("test")
+    evaluation_tasks = split_tasks(args.split)
     train_tasks = split_tasks("train")
+    if {task.source_key for task in evaluation_tasks} & {task.source_key for task in train_tasks}:
+        raise RuntimeError("evaluation source entity overlaps training")
 
     def rows(tasks):
         return Dataset.from_dict({
@@ -76,7 +79,7 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(adapter_dir)
     trainer = GRPOTrainer(
         model=model, processing_class=tokenizer, args=config,
-        train_dataset=rows(train_tasks), eval_dataset=rows(test_tasks),
+        train_dataset=rows(train_tasks), eval_dataset=rows(evaluation_tasks),
         reward_funcs=[reward_outcome, reward_process],
         environment_factory=BioGymRLToolEnv,
     )
@@ -89,16 +92,17 @@ def main() -> None:
     finally:
         os.environ.pop("BIOGYM_RL_TRACE_DIR", None)
     summary = _summarize_traces(trace_dir)
-    expected = {task.id for task in test_tasks}
+    expected = {task.id for task in evaluation_tasks}
     if {row["case_id"] for row in summary["rows"]} != expected:
         raise RuntimeError("held-out evaluation did not cover every case")
-    if summary["attempts"] != len(test_tasks) * config.num_generations_eval:
+    if summary["attempts"] != len(evaluation_tasks) * config.num_generations_eval:
         raise RuntimeError("held-out evaluation has unexpected attempt count")
     report = {
         "schema_version": SCHEMA_VERSION, "scorer_version": SCORER_VERSION,
         "suite_hash": SUITE_HASH, "created_at": datetime.now(timezone.utc).isoformat(),
         "training_run": str(run_dir), "training_commit": training_report["code_commit"],
         "model_id": training_report["model_id"], "adapter": args.adapter,
+        "split": args.split, "generations_per_case": config.num_generations_eval,
         "adapter_sha256": adapter_hash, "seed": training_report["seed"],
         "gpu": torch.cuda.get_device_name(0), "torch": torch.__version__,
         "trl": __import__("trl").__version__, "python": platform.python_version(),

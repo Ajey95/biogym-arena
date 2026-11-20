@@ -119,17 +119,13 @@ def main() -> None:
     trainer.processing_class.save_pretrained(pre)
     pre_hashes = _file_hashes(pre)
 
-    before_dir = output / "traces" / "before_test"
-    before_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["BIOGYM_RL_TRACE_DIR"] = str(before_dir)
-    from transformers import set_seed
-    set_seed(args.seed + 10000)
-    before_metrics = trainer.evaluate(metric_key_prefix="before")
-
     train_dir = output / "traces" / "train"
     train_dir.mkdir(parents=True, exist_ok=True)
     os.environ["BIOGYM_RL_TRACE_DIR"] = str(train_dir)
-    training_result = trainer.train()
+    try:
+        training_result = trainer.train()
+    finally:
+        os.environ.pop("BIOGYM_RL_TRACE_DIR", None)
     trainer.save_state()
     trainer.model.save_pretrained(post)
     trainer.processing_class.save_pretrained(post)
@@ -138,13 +134,6 @@ def main() -> None:
         raise RuntimeError("adapter tensor hash did not change")
     if trainer.state.global_step < 1:
         raise RuntimeError("optimizer did not step")
-
-    after_dir = output / "traces" / "after_test"
-    after_dir.mkdir(parents=True, exist_ok=True)
-    os.environ["BIOGYM_RL_TRACE_DIR"] = str(after_dir)
-    set_seed(args.seed + 10000)
-    after_metrics = trainer.evaluate(metric_key_prefix="after")
-    os.environ.pop("BIOGYM_RL_TRACE_DIR", None)
 
     # Reopen the saved adapter through the standard PEFT loader and perform a
     # short generation. A changed file hash alone is not a usable checkpoint.
@@ -161,16 +150,7 @@ def main() -> None:
     if not checkpoint_probe:
         raise RuntimeError("reloaded checkpoint produced no text")
 
-    before_summary = _summarize_traces(before_dir)
-    after_summary = _summarize_traces(after_dir)
-    expected_case_ids = {task.id for task in test_tasks}
-    for summary in (before_summary, after_summary):
-        if {row["case_id"] for row in summary["rows"]} != expected_case_ids:
-            raise RuntimeError("held-out evaluation missed one or more cases")
-    if {row["case_id"] for row in before_summary["rows"]} != {
-        row["case_id"] for row in after_summary["rows"]
-    }:
-        raise RuntimeError("before/after case sets differ")
+    train_summary = _summarize_traces(train_dir)
     try:
         git_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     except (OSError, subprocess.CalledProcessError):
@@ -192,9 +172,8 @@ def main() -> None:
         "torch": torch.__version__, "python": platform.python_version(),
         "trl": __import__("trl").__version__,
         "training_loss": training_result.training_loss,
-        "before_metrics": before_metrics, "after_metrics": after_metrics,
-        "before_test": before_summary,
-        "after_test": after_summary,
+        "train_trace_summary": train_summary,
+        "evaluation_status": "requires_fresh_process_pre_post_and_transfer_runs",
         "limitations": [
             "This trains a Qwen LLM adapter, not Sarvam 30B.",
             "Source data are cached UniProt/RCSB metadata and authored tasks, not biological validation.",
@@ -204,7 +183,7 @@ def main() -> None:
     (output / "run_manifest.json").write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     shutil.make_archive(str(output), "zip", root_dir=output.parent, base_dir=output.name)
     print(json.dumps({key: report[key] for key in (
-        "model_id", "optimizer_steps", "trainable_parameters", "before_test", "after_test")}, indent=2))
+        "model_id", "optimizer_steps", "trainable_parameters", "train_trace_summary")}, indent=2))
 
 
 if __name__ == "__main__":

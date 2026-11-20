@@ -10,6 +10,8 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .rl_suite import SUITE_HASH, split_tasks
+
 
 def _read(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
@@ -48,8 +50,18 @@ def main() -> None:
     if output.exists():
         raise FileExistsError("comparison bundle already exists")
     run = _read(args.run_dir / "run_manifest.json")
+    if run["suite_hash"] != SUITE_HASH:
+        raise ValueError("training run belongs to a different suite version")
     pre = _read(args.pre_eval / "evaluation_manifest.json")
     post = _read(args.post_eval / "evaluation_manifest.json")
+    evaluation_split = pre.get("split", "test")
+    if evaluation_split not in {"test", "transfer"} or post.get("split", "test") != evaluation_split:
+        raise ValueError("evaluation splits differ or are not held-out")
+    expected_case_ids = {task.id for task in split_tasks(evaluation_split)}
+    generations = pre.get("generations_per_case", 2)
+    if post.get("generations_per_case", 2) != generations or generations < 1:
+        raise ValueError("evaluation attempt budgets differ")
+    expected_attempts = len(expected_case_ids) * generations
     for label, item in (("pre", pre), ("post", post)):
         if item["adapter"] != label or item["suite_hash"] != run["suite_hash"]:
             raise ValueError(f"{label} evaluation has wrong adapter or suite")
@@ -57,8 +69,8 @@ def main() -> None:
             raise ValueError(f"{label} evaluation has wrong model or seed")
         if item["adapter_sha256"] != run[f"{label}_adapter_hashes"]["adapter_model.safetensors"]:
             raise ValueError(f"{label} adapter hash mismatch")
-        if item["heldout"]["attempts"] != 32:
-            raise ValueError(f"{label} evaluation lacks 32 attempts")
+        if item["heldout"]["attempts"] != expected_attempts:
+            raise ValueError(f"{label} evaluation lacks {expected_attempts} attempts")
     if run["optimizer_steps"] < 1 or run["pre_adapter_hashes"]["adapter_model.safetensors"] == run["post_adapter_hashes"]["adapter_model.safetensors"]:
         raise ValueError("no verified LLM adapter update")
 
@@ -69,10 +81,10 @@ def main() -> None:
             raise ValueError(f"{label} evaluation log contains a memory or execution failure")
     before = _by_case(pre["heldout"]["rows"])
     after = _by_case(post["heldout"]["rows"])
-    if before.keys() != after.keys() or len(before) != 16:
+    if before.keys() != after.keys() or before.keys() != expected_case_ids:
         raise ValueError("held-out case sets differ")
-    if any(len(before[key]) != 2 or len(after[key]) != 2 for key in before):
-        raise ValueError("each case must have two attempts per policy")
+    if any(len(before[key]) != generations or len(after[key]) != generations for key in before):
+        raise ValueError("each case must have the declared attempts per policy")
     per_case = []
     for case_id in sorted(before):
         per_case.append({
@@ -95,19 +107,20 @@ def main() -> None:
         "evaluation_code_commit": args.evaluation_code_commit,
         "suite_hash": run["suite_hash"], "scorer_version": run["scorer_version"],
         "seed": run["seed"], "optimizer_steps": run["optimizer_steps"],
+        "evaluation_split": evaluation_split,
         "pre_adapter_sha256": pre["adapter_sha256"],
         "post_adapter_sha256": post["adapter_sha256"],
-        "heldout_cases": len(per_case), "attempts_per_policy": 32,
+        "heldout_cases": len(per_case), "attempts_per_policy": expected_attempts,
         "before_successes": pre["heldout"]["successes"],
         "after_successes": post["heldout"]["successes"],
-        "before_success_rate": pre["heldout"]["successes"] / 32,
-        "after_success_rate": post["heldout"]["successes"] / 32,
+        "before_success_rate": pre["heldout"]["successes"] / expected_attempts,
+        "after_success_rate": post["heldout"]["successes"] / expected_attempts,
         "observed_delta": sum(deltas) / len(deltas),
         "paired_case_bootstrap_95pct": [boot[49], boot[1949]],
         "regressed_cases": sum(delta < 0 for delta in deltas),
         "improved_cases": sum(delta > 0 for delta in deltas),
         "per_case": per_case,
-        "interpretation": "Descriptive 16-case pilot; no broad scientific reliability claim.",
+        "interpretation": "Descriptive held-out comparison; no broad scientific reliability claim.",
     }
     output.parent.mkdir(parents=True, exist_ok=True)
     comparison_json = output.with_suffix(".json")
@@ -132,7 +145,7 @@ def main() -> None:
             bundle.write(path, f"code/{relative}")
     print(json.dumps({
         "before": report["before_successes"], "after": report["after_successes"],
-        "cases": report["heldout_cases"], "attempts_per_policy": 32,
+        "cases": report["heldout_cases"], "attempts_per_policy": expected_attempts,
         "bundle": str(output), "bundle_sha256": hashlib.sha256(output.read_bytes()).hexdigest(),
     }))
 

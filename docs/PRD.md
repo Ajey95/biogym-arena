@@ -1,15 +1,15 @@
 # BioGym Arena — Product Requirements Document
 
-**Version:** 1.0
+**Version:** 1.1
 
 **Date:** 20 November 2026
 
-**Status:** Approved product direction; implementation has not started
+**Status:** Active implementation; completion gates remain open
 
 **Scope:** Complete product and technical build specification
 **Authority:** This document is the build reference for BioGym Arena. The selected [top-down laboratory design](design/top-down-flow/README.md) governs the visual journey. If implementation exposes a conflict, record the decision and update this PRD before changing product behavior.
 
-> **Implementation hold:** The owner has explicitly asked that product implementation wait until they say to start. Documentation, design, and planning do not constitute authorization to build the application.
+> **Authorization update:** The owner later explicitly requested that application implementation begin. The earlier implementation hold is superseded. This PRD remains the product and scientific-integrity reference.
 
 ## 1. Product definition
 
@@ -371,7 +371,7 @@ Risks include prompt injection in upstream text, benchmark leakage, reward hacki
 
 ## 12. Work breakdown and milestones
 
-Work begins only after the owner explicitly authorizes implementation. Within that authorization, build in dependency order:
+The owner has authorized implementation. Build in dependency order:
 
 | Milestone | Deliverables | Exit condition |
 | --- | --- | --- |
@@ -406,3 +406,20 @@ These require concrete choices at implementation start, not assumptions disguise
 - [Sarvam open-weight announcement](https://www.sarvam.ai/blogs/sarvam-30b-105b) and [Sarvam 30B model card](https://huggingface.co/sarvamai/sarvam-30b). Open weights permit an independently trained adapter, subject to model compatibility and compute; a hosted API call does not update Sarvam's served model.
 
 **Document maintenance:** Record changes as versioned PRD revisions with date, reason, affected requirements and migration impact. Keep the README's architecture/results placeholders empty until implementation and measured results exist. Do not turn an aspiration in this document into a claimed result.
+
+### Revision 1.1 — 21 November 2026
+
+The owner requested a stronger working BioGym environment and RL path after the
+initial Qwen3-0.6B pilot. This revision updates implementation status and
+records the `biogym-rl-v2` exercise suite: 80 train, 20 test, and 20 transfer
+episodes from 24 cached UniProt/RCSB records. Peptide tasks now check only
+occurrence in the captured 32-residue sequence window; authored predictor
+scores are removed. A binding-claim audit requires abstention, and paired
+sequence/structure cases require independent evidence across rooms. The public
+observation no longer includes exact scoring labels or the required limitation.
+Repeated successful calls cannot increase process reward. Fresh-process test
+and transfer evaluation use suite-derived denominators. These changes affect
+SCI-02, GRD-01, RL-01, EVAL-01, XFER-01 and PROV-01. The version 1 pilot result
+remains historical; it cannot be presented as a version 2 result. No expert
+review, version 2 model training, or transfer measurement is implied by this
+revision.
