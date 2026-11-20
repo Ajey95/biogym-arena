@@ -88,6 +88,7 @@ def main() -> None:
         model_init_kwargs={"dtype": "float16"},
         fp16=True, bf16=False, use_vllm=False,
         per_device_train_batch_size=1, gradient_accumulation_steps=2,
+        per_device_eval_batch_size=2,
         num_generations=2, num_generations_eval=2,
         max_completion_length=1024,
         max_tool_calling_iterations=6,
@@ -99,6 +100,8 @@ def main() -> None:
         seed=args.seed, data_seed=args.seed,
         remove_unused_columns=False,
     )
+    if config.per_device_eval_batch_size != config.generation_batch_size:
+        raise RuntimeError("evaluation batch size must match the stateful environment pool")
     peft = LoraConfig(r=8, lora_alpha=16, lora_dropout=0.0,
                       bias="none", task_type="CAUSAL_LM",
                       target_modules=["q_proj", "k_proj", "v_proj", "o_proj"])
