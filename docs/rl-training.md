@@ -62,6 +62,21 @@ only when the adapter tensor hash changed, optimizer steps are positive, the
 checkpoint reloads, and held-out results are present. Repeated evaluations
 over the same case do not increase the count of independent cases.
 
+For the final comparison, evaluate both frozen adapters in separate fresh GPU
+processes. This removes optimizer state from the post-training memory budget
+and checks the exact same 16 cases and 32 attempts per adapter:
+
+```bash
+python -m biogym.rl_eval --run-dir /content/biogym-run --adapter pre \
+  --output /content/biogym-pre-eval
+python -m biogym.rl_eval --run-dir /content/biogym-run --adapter post \
+  --output /content/biogym-post-eval
+```
+
+Do not reuse a run or evaluation output directory after a failed attempt;
+partial traces would corrupt the denominator. Review GPU allocation warnings
+and generation errors before using an evaluation as evidence.
+
 ## Current gates before a broad claim
 
 - Expand independently reviewed source entities, especially epitope evidence
