@@ -56,7 +56,7 @@ def main() -> None:
     )
     examples = [example | {"tools": schemas}
                 for item in demonstrations for example in decision_examples(item)]
-    dataset = Dataset.from_list(examples, on_mixed_types="use_json")
+    dataset = Dataset.from_list(examples)
     config = SFTConfig(
         output_dir=str(output / "trainer"),
         model_init_kwargs={"dtype": "float16"},
