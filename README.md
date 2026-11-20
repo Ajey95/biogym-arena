@@ -82,6 +82,8 @@ The planned interface synchronizes:
 - step-level rewards with explanations and LabOps / ResearchSense scorecards;
 - clickable provenance from source record through tool result to agent claim.
 
+See the [frontend visual reference](docs/design/frontend-visual-reference.md) for the proposed lab floor, scientific room, replay, TransferArena, and Evaluation Hall screens.
+
 An **Evaluation Hall** would compare a baseline with a later policy or configuration on the same held-out tasks. A completed run would offer a downloadable ZIP with its inputs, configuration, actions, observations, tool outputs, source snapshots, reward breakdown, molecular artifacts where applicable, report, and integrity manifest. Secrets and private credentials must be excluded from exports.
 
 Sarvam AI is a proposed baseline agent for tool-use episodes; Smallest.ai is planned for spoken replay; Devin is the planned development assistant for the hackathon. None of these integrations is present yet.
