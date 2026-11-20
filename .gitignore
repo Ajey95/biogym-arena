@@ -10,3 +10,7 @@ build/
 coverage/
 *.log
 *.zip
+.npm-cache/
+.data/
+*.egg-info/
+*.tsbuildinfo

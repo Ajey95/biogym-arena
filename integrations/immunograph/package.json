@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "immunograph-mcp": "https://github.com/Ajey95/immuno-graph/releases/download/v0.2.1/immunograph-mcp-0.2.1.tgz"
+  }
+}
