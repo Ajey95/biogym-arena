@@ -77,6 +77,13 @@ Do not reuse a run or evaluation output directory after a failed attempt;
 partial traces would corrupt the denominator. Review GPU allocation warnings
 and generation errors before using an evaluation as evidence.
 
+After both evaluations finish, `python -m biogym.rl_compare` validates the
+adapter lineage, the 16 matched case groups, 32 attempts per policy, and clean
+evaluation logs. It writes a comparison JSON and bundles the checkpoints,
+training/evaluation traces, logs, source snapshot, training code and notebook
+into one ZIP. The case-clustered bootstrap interval is descriptive for this
+small authored suite.
+
 ## Current gates before a broad claim
 
 - Expand independently reviewed source entities, especially epitope evidence
