@@ -1,19 +1,19 @@
 # BioGym Arena — Product Requirements Document
 
-**Version:** 1.0
+**Version:** 1.2
 
-**Date:** 20 November 2026
+**Date:** 21 November 2026
 
-**Status:** Approved product direction; implementation has not started
+**Status:** Active implementation; completion gates remain open
 
 **Scope:** Complete product and technical build specification
 **Authority:** This document is the build reference for BioGym Arena. The selected [top-down laboratory design](design/top-down-flow/README.md) governs the visual journey. If implementation exposes a conflict, record the decision and update this PRD before changing product behavior.
 
-> **Implementation hold:** The owner has explicitly asked that product implementation wait until they say to start. Documentation, design, and planning do not constitute authorization to build the application.
+> **Authorization update:** The owner later explicitly requested that application implementation begin. The earlier implementation hold is superseded. This PRD remains the product and scientific-integrity reference.
 
 ## 1. Product definition
 
-BioGym Arena is an instrumented training and evaluation laboratory for bioinformatics agents. An agent enters a scientific room, attempts versioned episodes against real or clearly marked replayed scientific inputs, uses tools through a controlled interface, receives independently computed feedback, and may undergo an actual model-policy update. It then faces unseen work in TransferArena. Scientists and developers inspect the full action and evidence trail in a 2D pixel laboratory and download a reproducible run package.
+BioGym Arena is an instrumented training and evaluation laboratory for bioinformatics agents. An LLM agent enters a scientific room, attempts versioned episodes against real or clearly marked replayed scientific inputs, uses tools through a controlled interface, receives independently computed feedback, and undergoes an actual model-policy update. It then faces unseen work in TransferArena. Scientists and developers inspect the full action and evidence trail in a 2D pixel laboratory and download a reproducible run package.
 
 The product asks a measurable question: **does training improve an agent's ability to execute scientific workflows and make evidence-supported judgments on held-out tasks?** The answer must be demonstrated by a frozen evaluation protocol and run artifacts, not inferred from a visually convincing replay.
 
@@ -44,7 +44,7 @@ BioGym Arena does not establish experimental binding, vaccine efficacy, drug saf
 
 ## 2. Release strategy and definition of “built”
 
-**Version 1** includes the complete platform, the first three validated rooms, all five training modes where their tasks are meaningful, real policy training, TransferArena, Evaluation Hall, provenance and ZIP. The **full domain vision** includes all ten rooms listed in §3.3. The remaining seven are subsequent implementation work under M7, not present capabilities. A room is “built” only when it has executable episode contracts, meaningful verifiers, reviewed scientific cases, replay, provenance, and evaluation coverage.
+**Version 1** includes the complete platform, the first three validated rooms, all five training modes where their tasks are meaningful, LLM trajectory collection, reward-driven LLM policy training, TransferArena, Evaluation Hall, provenance and ZIP. The **full domain vision** includes all ten rooms listed in §3.3. The remaining seven are subsequent implementation work under M7, not present capabilities. A room is “built” only when it has executable episode contracts, meaningful verifiers, reviewed scientific cases, replay, provenance, and evaluation coverage. A small custom neural action selector may prove that the runtime can update parameters, but it does **not** satisfy the LLM post-training requirement.
 
 The **hackathon target** is an honest vertical slice of the same architecture: one or more high-quality episodes in each initial room, a real ImmunoGraph-backed task, at least one live source call where available, a fault/recovery case, TransferArena, and the selected visual journey. **A genuine RL-driven weight or adapter update and a separately scored held-out comparison are mandatory for this target.** If the time budget forces a tradeoff, narrow the number of episodes or visual polish before dropping the policy update or TransferArena. A configuration-only comparison is an explicitly incomplete fallback demonstration, never a substitute for this requirement or a “trained agent” claim.
 
@@ -72,9 +72,11 @@ The IDs below are stable traceability anchors for issues, implementation PRs, an
 | SCI-01 | P0 | Real scientific tools with source-status envelope | Pinned ImmunoGraph call and a source trace with hashes |
 | SCI-02 | P0 | Reviewed cases in the three initial rooms | Case cards, hidden verifiers, positive/negative/fault examples |
 | GRD-01 | P0 | Independent outcome, LabOps and ResearchSense grading | Per-event findings and separate score components |
-| RL-01 | P0 | Actual RL-driven trainable-policy update in the hackathon target and full product | Pre/post policy hashes, optimizer steps, loadable checkpoint |
+| TRAJ-01 | P0 | Full LLM trajectories for successful and failed attempts, with a provenance-preserving curated subset for post-training | Conversation, tool/action/observation log, reward and filter decision per attempt |
+| RL-01 | P0 | Actual reward-driven **LLM** policy update in the hackathon target and full product | Pre/post LLM or adapter hashes, optimizer steps, loadable checkpoint |
 | EVAL-01 | P0 | Frozen paired held-out comparison | Per-case baseline/updated-policy results under matched conditions |
 | XFER-01 | P0 | Unseen TransferArena task | Sealed case, independent score, no training exposure |
+| XFER-02 | P0 | Sim-to-real loop from live failures into versioned training cases | Captured failure, reviewed case revision, retraining and re-evaluation lineage |
 | PROV-01 | P0 | Durable event and evidence lineage | Append-only events and source → claim DAG |
 | UX-01 | P0 | Selected 2D laboratory journey | Doors, room interiors, event-driven robot, truthful replay |
 | EXP-01 | P0 | Downloadable integrity-checked run ZIP | Validated manifest, replay inputs, no secrets |
@@ -208,15 +210,25 @@ The event log is append-only and authoritative. Each event contains run/attempt 
 
 ### 6.1 Two agent tracks
 
-**Track A: hosted baseline.** Sarvam AI may provide a tool-capable baseline or comparison agent if its current API and terms support the required calling pattern. Calls, prompts, model identifier, decoding, and outputs are logged. A hosted API call does not prove a weight update. A changed prompt/tool set is labeled “revised configuration.”
+**Track A: hosted Sarvam agent and trajectory generator.** Sarvam's hosted tool-capable API can attempt BioGym episodes, provide a strong baseline or teacher, and generate complete trajectories. Calls, prompts, model identifier, decoding, tool schemas, outputs, cost and rewards are logged. A hosted API call does not by itself update the hosted model. A changed prompt/tool set is labeled “revised configuration.”
 
-**Track B: trainable policy.** Select an open-weight, tool-capable model after testing license, chat/tool template, VRAM, context length, and episode performance. The proposed implementation uses parameter-efficient fine-tuning when appropriate, a frozen reference/baseline, and [TRL's OpenEnv integration](https://huggingface.co/docs/trl/openenv) for multi-turn environment rollouts and GRPO-style policy optimization. The precise model, trainer version, adapter rank, optimizer, and compute plan are implementation decisions to record before a training run. OpenEnv provides the environment; the trainer performs parameter updates.
+**Track B: trainable Sarvam LLM.** [Sarvam 30B and 105B weights are published openly](https://www.sarvam.ai/blogs/sarvam-30b-105b); the [Sarvam 30B model card](https://huggingface.co/sarvamai/sarvam-30b) lists Apache-2.0 and is the preferred Sarvam adaptation target, subject to a compatibility and GPU pilot. Sarvam 105B is a strong hosted teacher/baseline but has a much larger checkpoint and multi-GPU burden. Use a frozen base/reference, parameter-efficient adapters where appropriate, and [TRL's OpenEnv integration](https://huggingface.co/docs/trl/openenv) for multi-turn GRPO-style optimization, or a documented PPO/verL path if compatibility requires it. Test the released model's custom architecture, chat/tool template, gradient flow, LoRA target modules, and trainer version before claiming support. The currently verified local RTX 4060 has 8 GB VRAM; this supports the starter neural policy but cannot hold Sarvam 30B weights entirely in GPU memory, even at 4-bit precision before training overhead. Sarvam 30B adaptation requires a separately validated offload or larger GPU setup. A smaller open-weight LLM may validate the LLM training path while Sarvam remains a hosted baseline; that is clearly a different model result. A hand-built small neural action policy is only a smoke test.
+
+**2026-11-20 compute decision:** The connected Colab account currently enables T4 but disables A100, H100, and L4. The first source-backed LLM RL pilot therefore uses Qwen3-0.6B LoRA on Colab T4 with explicit model labeling. Its 24 cached UniProt/RCSB source records create 64 train, 16 held-out test, and 16 transfer episodes, with entity-disjoint splits, provenance and failure-recovery checks. See [the concrete training protocol](rl-training.md). This pilot validates LLM RL plumbing; it does not count as Sarvam 30B training or the complete scientific case suite. Sarvam 30B remains a separate larger-GPU compatibility and training run.
+
+### 6.1.1 End-to-end post-training loop
+
+1. **Trajectory generation:** Run a frozen base LLM (Sarvam hosted or open-weight where available) through thousands of varied, versioned OpenEnv episodes. Persist every user prompt, model response, tool call, environment observation, reward component, source envelope, terminal state and model/version settings. Preserve failures as first-class data.
+2. **Curation:** Derive a quality-controlled success subset for optional supervised warm-start, while retaining failed, ambiguous, abstention and adversarial trajectories for analysis and future curriculum design. Filtering is versioned and auditable; do not train on the held-out suite or select only “easy successes.”
+3. **Reward-driven post-training:** Use live multi-turn rollouts from the train split with GRPO/PPO or another justified policy optimizer. The environment independently grades each trajectory; the trainer updates LLM weights/adapters and saves checkpoints plus optimizer evidence.
+4. **Benchmarking:** Freeze the new policy and compare it with its own pre-update baseline on sealed held-out cases, matched budgets, source snapshots and grader. Report per-case outcomes and error classes.
+5. **Sim-to-real:** Run the frozen policy against unseen live scientific APIs in TransferArena. Capture failures, have a domain reviewer convert eligible failures into **new versioned training cases**, retrain the next policy version, and rerun held-out and live transfer evaluations. Never silently move an active transfer case into the training set and continue to call it held out.
 
 ### 6.2 Training sequence
 
-1. Freeze environment, tool gateway, reward rubric, task splits, token/tool budgets, and baseline policy.
+1. Freeze environment, tool gateway, reward rubric, task splits, token/tool budgets, and baseline LLM policy.
 2. Validate the model's structured tool-call competence. If needed, run supervised warm-start on authored or licensed training trajectories, separately recording its effect.
-3. Collect baseline trajectories across the training and validation distributions. Confirm independent grading and inspect weak/strong examples.
+3. Collect and curate baseline LLM trajectories across the training and validation distributions. Confirm independent grading and inspect weak/strong examples; retain all original traces and filter decisions.
 4. Train on training cases only with multi-turn rollouts. Record optimizer steps, learning rate, loss, KL/reference divergence where relevant, reward components, truncations, invalid actions, tokens, wall time, and compute cost.
 5. Save immutable checkpoints and pre/post model or adapter digests. Verify at least one trainable parameter changed and that the resulting policy loads and acts.
 6. Select a checkpoint using validation cases; never select on TransferArena/held-out test results.
@@ -359,15 +371,15 @@ Risks include prompt injection in upstream text, benchmark leakage, reward hacki
 
 ## 12. Work breakdown and milestones
 
-Work begins only after the owner explicitly authorizes implementation. Within that authorization, build in dependency order:
+The owner has authorized implementation. Build in dependency order:
 
 | Milestone | Deliverables | Exit condition |
 | --- | --- | --- |
 | M0 — Decisions and source audit | Model/compute choice; provider credentials and terms; case-review owner; schemas; reproducibility policy | Versioned architecture decision records and source licenses |
 | M1 — Runtime spine | Database/artifact store; event log; run orchestration; OpenEnv reset/step/state; tool gateway; export skeleton | One replayable, independently graded episode with full trace |
 | M2 — Three initial rooms | Reviewed sequence, structure and epitope cases; all applicable modes; fault injection; provenance | Each room passes case, rubric and integration gates |
-| M3 — Trainable agent | Baseline, data split, warm-start if needed, GRPO/other justified RL update, checkpoints and registry | Proven weight/adapter update and frozen held-out evaluation |
-| M4 — TransferArena and Evaluation Hall | Sealed transfer suite, paired comparison, metrics and evidence wall | No leakage; honest labeled result with denominator and source status |
+| M3 — LLM post-training | Hosted Sarvam agent, trajectory corpus, curation, trainable Sarvam 30B compatibility pilot, warm-start if needed, GRPO/PPO update, checkpoints and registry | Proven **LLM** weight/adapter update and frozen held-out evaluation |
+| M4 — TransferArena and Evaluation Hall | Sealed transfer suite, paired comparison, metrics, evidence wall, and live-failure-to-new-case protocol | No leakage; honest labeled result with denominator and source status; new case version linked to captured failure |
 | M5 — Pixel frontend | Outer map, interiors, robot, synced timeline/graph, 3D viewer, accessibility, ZIP terminal | UI renders recorded events and export passes integrity checks |
 | M6 — Release hardening | Security, failure recovery, observability, documentation, scientific review, end-to-end rehearsal | All completion gates in §2.1 evidenced |
 | M7 — Expansion | Seven later scientific rooms, each with its own source/verifier/review plan | Every additional room clears the same gates as initial rooms |
@@ -391,5 +403,37 @@ These require concrete choices at implementation start, not assumptions disguise
 - [ImmunoGraph repository](https://github.com/Ajey95/immuno-graph), [tool catalog](https://github.com/Ajey95/immuno-graph/blob/main/docs/TOOL_CATALOG.md), [tool reality matrix](https://github.com/Ajey95/immuno-graph/blob/main/docs/TOOL_REALITY_MATRIX.md), and [live workflow guide](https://github.com/Ajey95/immuno-graph/blob/main/docs/LIVE_WORKFLOWS.md).
 - [BioAgent Bench (ICML 2026)](https://proceedings.mlr.press/v306/fa26a.html), [BixBench](https://arxiv.org/abs/2503.00096), [BixBench3 preprint](https://arxiv.org/abs/2608.25286), and [BiomniBench preprint](https://www.biorxiv.org/content/10.64898/2026.05.12.724604v2) are related research, not BioGym Arena validation.
 - [Sarvam API documentation](https://docs.sarvam.ai/api/token-factory/chat-completions) and [Smallest.ai speech documentation](https://docs.smallest.ai/api-reference/models/text-to-speech/synthesize-speech). Verify current model availability before implementation.
+- [Sarvam open-weight announcement](https://www.sarvam.ai/blogs/sarvam-30b-105b) and [Sarvam 30B model card](https://huggingface.co/sarvamai/sarvam-30b). Open weights permit an independently trained adapter, subject to model compatibility and compute; a hosted API call does not update Sarvam's served model.
 
 **Document maintenance:** Record changes as versioned PRD revisions with date, reason, affected requirements and migration impact. Keep the README's architecture/results placeholders empty until implementation and measured results exist. Do not turn an aspiration in this document into a claimed result.
+
+### Revision 1.1 — 21 November 2026
+
+The owner requested a stronger working BioGym environment and RL path after the
+initial Qwen3-0.6B pilot. This revision updates implementation status and
+records the `biogym-rl-v2` exercise suite: 80 train, 20 test, and 20 transfer
+episodes from 24 cached UniProt/RCSB records. Peptide tasks now check only
+occurrence in the captured 32-residue sequence window; authored predictor
+scores are removed. A binding-claim audit requires abstention, and paired
+sequence/structure cases require independent evidence across rooms. The public
+observation no longer includes exact scoring labels or the required limitation.
+Repeated successful calls cannot increase process reward. Fresh-process test
+and transfer evaluation use suite-derived denominators. These changes affect
+SCI-02, GRD-01, RL-01, EVAL-01, XFER-01 and PROV-01. The version 1 pilot result
+remains historical; it cannot be presented as a version 2 result. No expert
+review, version 2 model training, or transfer measurement is implied by this
+revision.
+
+### Revision 1.2 — 21 November 2026
+
+The v2 training recipe now builds verifier-checked demonstrations from the
+train split, supervises each next tool decision with prior tool observations
+as context, checks the warm-start adapter's lineage, and then performs GRPO
+updates. A Qwen3-0.6B Colab T4 run completed 62 supervised and 32 GRPO
+optimizer steps. Fresh-process evaluations measured 5/40 to 9/40 verified
+successes on held-out test cases and 3/40 to 6/40 in TransferArena. Both
+paired bootstrap intervals include zero. Complete run bundles and comparison
+manifests are recorded in [results](../results/README.md). This establishes a
+working LLM adapter training and evaluation path for RL-01, EVAL-01, XFER-01,
+and PROV-01. It does not satisfy independent scientific review, broad
+reliability, Sarvam model adaptation, or app serving integration.

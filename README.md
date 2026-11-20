@@ -7,7 +7,7 @@
 <p align="center"><strong>A training and evaluation laboratory for bioinformatics AI agents.</strong></p>
 
 <p align="center">
-  <a href="#project-status"><img alt="Status: planning" src="https://img.shields.io/badge/status-planning-326f80" /></a>
+  <a href="#project-status"><img alt="Status: active build" src="https://img.shields.io/badge/status-active%20build-5d866c" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-5b6d7d" /></a>
   <a href="#scientific-boundaries"><img alt="Scientific use: computational research" src="https://img.shields.io/badge/scientific%20use-computational%20research-7557a6" /></a>
 </p>
@@ -22,9 +22,31 @@
 
 ## Project status
 
-BioGym Arena is a **documentation-first project proposal**. This repository does not yet contain a running OpenEnv environment, trained agent, TransferArena evaluation, frontend, or measured results. The sections below describe the intended product and evaluation protocol, not implemented capabilities.
+BioGym Arena is under active development. The repository contains a runnable three-room episode API, fixture cases, an OpenEnv WebSocket adapter, an ImmunoGraph MCP integration, a pixel laboratory frontend, a trainable starter policy, paired evaluation, and run exports. The current source-backed **LLM RL suite v2** has 80 training, 20 held-out test, and 20 transfer episodes over cached UniProt/RCSB records, including unsupported-claim audits and paired sequence/structure tasks. Its [training protocol](docs/rl-training.md) adds a train-only tool-use warm start before GRPO, followed by fresh-process test and transfer evaluation. A [measured Qwen3-0.6B LoRA run](results/README.md) completed 62 supervised and 32 GRPO optimizer steps; verified success changed from 5/40 to 9/40 on held-out test and from 3/40 to 6/40 in TransferArena. Both uncertainty intervals include zero, and neither suite establishes broad biological validity. A Sarvam 105B hosted trajectory collector and verified-success curator are implemented but have not made an authenticated model call. The starter policy remains a separate small neural action selector.
 
-The [Product Requirements Document](docs/PRD.md) is the technical build reference. The [selected top-down frontend design](docs/design/top-down-flow/README.md) defines the visual journey. Implementation will begin only when the project owner explicitly asks for it.
+The [Product Requirements Document](docs/PRD.md) is the technical build reference. The [selected top-down frontend design](docs/design/top-down-flow/README.md) defines the visual journey.
+
+### Run locally with the NVIDIA GPU
+
+On the verified RTX 4060 Laptop GPU, the NVIDIA driver supports CUDA and the project uses a CUDA enabled PyTorch wheel in `.venv`. A separate CUDA Toolkit installation is not required for this PyTorch training path. On another Windows machine, install the wheel version appropriate for its driver from [PyTorch's official installer](https://pytorch.org/get-started/locally/), then install the backend:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install "torch==2.6.0" --index-url https://download.pytorch.org/whl/cu124
+.\.venv\Scripts\python.exe -m pip install -e "backend[dev]" numpy
+$env:BIOGYM_DEVICE = "cuda"
+.\.venv\Scripts\python.exe -m uvicorn biogym.api:app --host 127.0.0.1 --port 8000
+```
+
+In a second terminal, run `npm install` and `npm run dev` in `frontend`. `BIOGYM_DEVICE=cuda` fails clearly if CUDA is unavailable; the default `auto` selects CUDA when present and CPU otherwise. Every trained policy records the selected device, GPU name, PyTorch version, CUDA runtime, optimizer steps, and checkpoint hash. The local 8 GB GPU runs the starter policy; Sarvam 30B adapter training needs substantially more model memory or a separately validated offload/cloud setup.
+
+The OpenEnv server uses the same episode engine and durable event log as the app API:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn biogym.openenv_server:app --host 127.0.0.1 --port 8001
+```
+
+Its training service accepts authored `train` cases through OpenEnv `reset()`, `step()`, and `state()`. The hosted Sarvam trajectory collector requires `SARVAM_API_KEY` and consumes Sarvam credits when run: `python -m biogym.collect --cases seq-01 struct-01 --episodes 4`. It records model requests, actions, environment events, reward, source status, and a curated train-only JSONL with a hash manifest. No Sarvam trajectories or LLM policy updates are claimed until they are actually run.
 
 ## The problem
 
@@ -68,15 +90,15 @@ They share an episode and may both be tested by one challenge. Evaluation report
 
 ### Shared environment and scientific tools
 
-The planned runtime follows [Hugging Face OpenEnv](https://huggingface.co/docs/openenv/index): an agent receives observations, takes actions through an episode interface, and receives environment-side rewards. A **harness** controls permitted actions and budgets; a **loop** advances actions, observations, and rewards; an **execution graph** records dependencies and evidence lineage.
+The runtime implements [OpenEnv](https://huggingface.co/docs/openenv/index) `reset()`, `step()`, and `state()` over a WebSocket server: an agent receives observations, takes actions, and gets environment-side rewards. A **harness** controls permitted actions and budgets; a **loop** advances actions, observations, and rewards; an **execution graph** records dependencies and evidence lineage.
 
-[ImmunoGraph MCP](https://github.com/Ajey95/immuno-graph) is the proposed first scientific tool layer. Its [tool catalog](https://github.com/Ajey95/immuno-graph/blob/main/docs/TOOL_CATALOG.md) covers sequence validation, immune prediction, evidence and ranking, structure, chemistry, docking, and exports. Its tools distinguish configured live results from fixtures and synthetic demonstrations. BioGym Arena would add episodes, independent grading, agent trajectories, and transfer evaluation around those calls. The 46 MCP tools are **not** 46 independent live data providers; availability depends on configuration and external runtimes. See ImmunoGraph's [execution reality matrix](https://github.com/Ajey95/immuno-graph/blob/main/docs/TOOL_REALITY_MATRIX.md).
+[ImmunoGraph MCP](https://github.com/Ajey95/immuno-graph) is the first scientific tool layer. Its [tool catalog](https://github.com/Ajey95/immuno-graph/blob/main/docs/TOOL_CATALOG.md) covers sequence validation, immune prediction, evidence and ranking, structure, chemistry, docking, and exports. The current BioGym adapter executes its released `validate_sequence` and `fetch_structure` tools, including a live RCSB PDB coordinate path. BioGym adds episodes, independent grading, agent trajectories, and transfer evaluation around those calls. The 46 MCP tools are **not** 46 independent live data providers; availability depends on configuration and external runtimes. See ImmunoGraph's [execution reality matrix](https://github.com/Ajey95/immuno-graph/blob/main/docs/TOOL_REALITY_MATRIX.md).
 
 ### TransferArena and visual replay
 
-**TransferArena is part of the initial demonstration plan.** It evaluates an agent on an unseen task after controlled room episodes, with source status and evaluation conditions visible. The initial demo targets at least one live scientific service. Recorded, versioned inputs are also needed for repeatable comparisons when external records or availability change; replayed data must not be labelled live.
+**TransferArena is present in the initial app.** It offers an unseen fixture case and a live RCSB structure task after recorded room attempts, with source status visible. The current policy comparison includes the fixture transfer case; automated before/after measurement on the live task remains work. Recorded, versioned inputs support repeatable comparisons when external records or availability change; replayed data must not be labelled live.
 
-The planned interface uses a **pixel-art laboratory** with a small robot representing the agent as it moves through cells. Its position and reactions should follow recorded episode events. The interface synchronizes:
+The interface uses a **pixel-art laboratory** with a small robot representing the agent as it moves through cells. Its position follows recorded episode events. The interface synchronizes:
 
 - a 3D molecular view using coordinates relevant to the active episode;
 - a live tool and evidence graph;
@@ -86,9 +108,9 @@ The planned interface uses a **pixel-art laboratory** with a small robot represe
 
 See the [selected top-down frontend design](docs/design/top-down-flow/README.md) for the outer lab map, room interiors, episode interaction, TransferArena, and Evaluation Hall. [Earlier visual explorations](docs/design/frontend-visual-reference.md) remain available for comparison.
 
-An **Evaluation Hall** would compare a baseline with a later policy or configuration on the same held-out tasks. A completed run would offer a downloadable ZIP with its inputs, configuration, actions, observations, tool outputs, source snapshots, reward breakdown, molecular artifacts where applicable, report, and integrity manifest. Secrets and private credentials must be excluded from exports.
+The **Evaluation Hall** compares a baseline with an updated starter policy on matched held-out fixture tasks. Attempt and evaluation ZIPs include inputs, actions, observations, tool outputs, reward breakdowns, policies, molecular coordinate artifacts where applicable, and an integrity manifest. Secrets and private credentials are excluded from exports.
 
-Sarvam AI is a proposed baseline agent for tool-use episodes; Smallest.ai is planned for spoken replay; Devin is the planned development assistant for the hackathon. None of these integrations is present yet.
+Sarvam 105B has a hosted trajectory adapter awaiting an API key and a measured run. Smallest.ai spoken replay and Devin integration remain planned.
 
 ## Evaluation
 
@@ -105,7 +127,7 @@ We intend to publish **measured outcomes with their denominators and conditions*
 
 For a before/after claim, the comparison should use held-out tasks, the same task definitions, tool access, budgets, and scoring rules, repeated episodes, and an identified baseline. The report should include the number of cases, per-task outcomes, reward definitions, model or configuration versions, episode seeds, source snapshots, and uncertainty appropriate to the sample size. The run package should preserve the evidence required to inspect a disputed result. Live sources can change; a saved snapshot supports replay, while a fresh live rerun may produce different data.
 
-**“After training” is reserved for an actual policy update.** An OpenEnv-compatible episode supplies actions, observations, and rewards; it does not itself change model weights. Until a trainable model and trainer are connected, any comparison will be labeled **baseline vs. revised configuration** or **agent A vs. agent B**. [TRL's OpenEnv integration](https://huggingface.co/docs/trl/openenv) documents one possible path to policy training.
+**“After training” is reserved for an actual policy update.** OpenEnv episodes supply actions, observations, and rewards; they do not themselves change model weights. The starter policy has its own policy-gradient update and held-out fixture comparison. Separately, the [Qwen3-0.6B LLM adapter pilot](results/README.md) used stateful tool episodes through TRL's `environment_factory`, changed adapter tensors over 16 optimizer steps, and was compared in fresh processes on 16 held-out cases. That adapter is not yet the app's serving policy. [TRL's environment integration](https://huggingface.co/docs/trl/openenv) describes the training contract.
 
 ## Scientific boundaries
 
@@ -132,7 +154,7 @@ These are related efforts and research context, not BioGym Arena results or endo
 
 ## Contributing
 
-This repository currently contains the project proposal and community files. Documentation corrections and research references are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Please use [SECURITY.md](SECURITY.md) for security reports.
+The repository contains the early app and research plan. Contributions should include source-status honesty and reproducible evidence; see [CONTRIBUTING.md](CONTRIBUTING.md). Please use [SECURITY.md](SECURITY.md) for security reports.
 
 ## License
 

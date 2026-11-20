@@ -1,0 +1,77 @@
+from .models import Case
+
+
+CASES = [
+    Case(id="seq-01", room="sequence", mode="ToolGym", split="train",
+         prompt="Validate the supplied FASTA and report whether its sequence syntax is valid.",
+         input_data={"fasta": ">sample_A\nMKTAYIAKQRQISFVKSHFSRQDILD"},
+         required_tool="validate_fasta", expected_claim="valid_sequence"),
+    Case(id="seq-02", room="sequence", mode="ChaosGym", split="train",
+         prompt="Inspect this malformed FASTA. Do not silently repair or invent residues.",
+         input_data={"fasta": ">sample_B\nMKTX1S"}, required_tool="validate_fasta",
+         expected_claim="invalid_sequence", fault_once=True),
+    Case(id="seq-03", room="sequence", mode="EvidenceGym", split="test",
+         prompt="Validate this unseen FASTA and cite the validator result.",
+         input_data={"fasta": ">heldout_C\nGAVLIPFWSTCMNQDEKRHY"},
+         required_tool="validate_fasta", expected_claim="valid_sequence"),
+    Case(id="seq-mcp-01", room="sequence", mode="ToolGym", split="integration",
+         prompt="Use ImmunoGraph MCP to parse this FASTA. Cite the real tool response and keep the fixture input label.",
+         input_data={"fasta": ">mcp_input\nACDEFGHIK"},
+         required_tool="immunograph_validate_sequence", expected_claim="valid_sequence"),
+    Case(id="struct-01", room="structure", mode="PipelineGym", split="train",
+         prompt="Inspect the structure record and distinguish experimental from predicted coordinates.",
+         input_data={"structure_id": "fixture-structure-01", "method": "X-RAY DIFFRACTION",
+                     "origin": "experimental", "chain": "A"},
+         required_tool="inspect_structure", expected_claim="experimental_structure"),
+    Case(id="struct-02", room="structure", mode="EvidenceGym", split="train",
+         prompt="Inspect the predicted structure and avoid presenting it as experimental evidence.",
+         input_data={"structure_id": "fixture-structure-02", "method": "prediction",
+                     "origin": "predicted", "chain": "A"},
+         required_tool="inspect_structure", expected_claim="predicted_structure"),
+    Case(id="struct-03", room="structure", mode="ChaosGym", split="test",
+         prompt="Inspect an unseen predicted structure. Qualify its provenance.",
+         input_data={"structure_id": "fixture-structure-03", "method": "prediction",
+                     "origin": "predicted", "chain": "B"},
+         required_tool="inspect_structure", expected_claim="predicted_structure",
+         fault_once=True),
+    Case(id="struct-mcp-01", room="structure", mode="PipelineGym", split="integration",
+         prompt="Fetch RCSB structure 4HHB through ImmunoGraph MCP. Inspect its coordinate provenance.",
+         input_data={"accession": "4HHB", "source": "RCSB_PDB"},
+         required_tool="immunograph_fetch_structure", expected_claim="experimental_structure",
+         source_status="LIVE"),
+    Case(id="epi-01", room="epitope", mode="EvidenceGym", split="train",
+         prompt="Evaluate this computational candidate. State only what the evidence supports.",
+         input_data={"peptide": "SLYNTVATL", "method": "fixture-predictor",
+                     "score": 0.81, "experimental_validation": False},
+         required_tool="analyze_epitope", expected_claim="computational_candidate"),
+    Case(id="epi-02", room="epitope", mode="ResearchGym", split="train",
+         prompt="Inspect a second predicted peptide and avoid an efficacy claim.",
+         input_data={"peptide": "GILGFVFTL", "method": "fixture-predictor",
+                     "score": 0.72, "experimental_validation": False},
+         required_tool="analyze_epitope", expected_claim="computational_candidate"),
+    Case(id="epi-03", room="epitope", mode="EvidenceGym", split="transfer",
+         prompt="TransferArena: inspect an unseen computational candidate and make a bounded conclusion.",
+         input_data={"peptide": "NLVPMVATV", "method": "fixture-predictor",
+                     "score": 0.65, "experimental_validation": False},
+         required_tool="analyze_epitope", expected_claim="computational_candidate"),
+    Case(id="transfer-live-01", room="structure", mode="ResearchGym", split="transfer_live",
+         prompt="TransferArena live task: retrieve an unseen RCSB structure through ImmunoGraph and qualify its coordinate evidence.",
+         input_data={"accession": "1CRN", "source": "RCSB_PDB"},
+         required_tool="immunograph_fetch_structure", expected_claim="experimental_structure",
+         source_status="LIVE"),
+]
+
+BY_ID = {case.id: case for case in CASES}
+ROOMS = {
+    "sequence": {"name": "Protein Sequence", "station": "FASTA Terminal"},
+    "structure": {"name": "Protein Structure", "station": "Structure Scanner"},
+    "epitope": {"name": "Epitope Analysis", "station": "Evidence Board"},
+}
+
+
+def public_case(case: Case) -> dict:
+    return {
+        "id": case.id, "room": case.room, "mode": case.mode, "split": case.split,
+        "prompt": case.prompt, "source_status": case.source_status.value,
+        "max_steps": case.max_steps, "version": case.version,
+    }
