@@ -2,7 +2,7 @@
 
 These boards show the intended **BioGym Arena experience**, not screenshots of a working application or measured evaluation results. Session names, episode statuses, trajectories, charts, and molecular imagery are illustrative design content. Product data must come from recorded episodes and scientific artifacts when the frontend is built.
 
-**Perspective exploration:** the [2D garage-world options](explorations/garage-view-options.md) explore a more game-like lab world with equipment stored in each bay. A side-view or top-down perspective has not yet been selected. The boards below remain references for information layout and inspection panels.
+**Selected direction:** the [top-down laboratory world](top-down-flow/README.md) is the current frontend design. The earlier [2D garage-world options](explorations/garage-view-options.md) and the boards below remain references for information layout and inspection panels.
 
 ## Pixel-art direction (current)
 

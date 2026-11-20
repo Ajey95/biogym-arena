@@ -1,6 +1,6 @@
 # 2D garage-world exploration
 
-These are **visual options**, not application screenshots or a selected frontend design. They respond to the request for a real 2D pixel game world where a small robot moves among laboratory garage bays and their equipment. The previous pixel-styled dashboard boards remain separate references for inspection panels and evaluation details.
+These are **visual explorations**, not application screenshots. The **top-down workshop (Option B) was selected** for the current [frontend flow design](../top-down-flow/README.md). The side-view garage remains an alternative reference. The previous pixel-styled dashboard boards remain separate references for inspection panels and evaluation details.
 
 ## Option A: side-view garage bays
 
