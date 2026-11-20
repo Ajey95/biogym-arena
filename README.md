@@ -22,7 +22,7 @@
 
 ## Project status
 
-BioGym Arena is under active development. The repository now contains a runnable three-room episode API, fixture cases, a real OpenEnv WebSocket adapter, an ImmunoGraph MCP integration, a pixel laboratory frontend, a trainable starter policy, paired evaluation, and run exports. A Sarvam 105B hosted trajectory collector and verified-success curator are implemented but have not made an authenticated model call. The starter policy is a small neural action selector, **not a Sarvam language model**. LLM weight or adapter training remains implementation work.
+BioGym Arena is under active development. The repository now contains a runnable three-room episode API, fixture cases, a real OpenEnv WebSocket adapter, an ImmunoGraph MCP integration, a pixel laboratory frontend, a trainable starter policy, paired evaluation, and run exports. A second, source-backed LLM RL suite contains 64 training, 16 held-out test, and 16 transfer episodes over cached UniProt/RCSB records, plus a TRL/GRPO LoRA training runner. See [the RL training protocol](docs/rl-training.md). The runner is implementation, **not a completed LLM training result** until its checkpoint and held-out report are produced. A Sarvam 105B hosted trajectory collector and verified-success curator are implemented but have not made an authenticated model call. The starter policy is a small neural action selector, **not a Sarvam language model**.
 
 The [Product Requirements Document](docs/PRD.md) is the technical build reference. The [selected top-down frontend design](docs/design/top-down-flow/README.md) defines the visual journey.
 
